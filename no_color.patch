@@ -1,0 +1,71 @@
+diff --git a/x.c b/x.c
+index ad1339f..4a17c4d 100644
+--- a/x.c
++++ b/x.c
+@@ -178,6 +178,7 @@ static void xsetenv(void);
+ static void xseturgency(int);
+ static int evcol(XEvent *);
+ static int evrow(XEvent *);
++static int no_color;
+ 
+ static void expose(XEvent *);
+ static void visibility(XEvent *);
+@@ -1516,6 +1517,11 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
+ 	Color *fg, *bg, *temp, revfg, revbg, truefg, truebg;
+ 	XRenderColor colfg, colbg;
+ 
++    if (no_color) {
++        fg = &dc.col[defaultfg];
++        bg = &dc.col[defaultbg];
++    } else {
++
+ 	/* Fallback on color display for attributes not supported by the font */
+ 	if (base.mode & ATTR_ITALIC && base.mode & ATTR_BOLD) {
+ 		if (dc.ibfont.badslant || dc.ibfont.badweight)
+@@ -1573,6 +1579,8 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
+ 		}
+ 	}
+ 
++    }
++
+ 	if ((base.mode & ATTR_BOLD_FAINT) == ATTR_FAINT) {
+ 		colfg.red = fg->color.red / 2;
+ 		colfg.green = fg->color.green / 2;
+@@ -1686,6 +1694,10 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og, Line line, int le
+ 		drawcol = dc.col[g.bg];
+ 	}
+ 
++    if (no_color) {
++        drawcol = dc.col[defaultfg];
++    }
++
+ 	/* draw the new one */
+ 	if (IS_SET(MODE_FOCUSED)) {
+ 		switch (win.cursor) {
+@@ -1695,7 +1707,12 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og, Line line, int le
+ 				break;
+ 			/* FALLTHROUGH */
+ 		case 2: /* Steady block */
+-			xdrawglyph(g, cx, cy);
++			//xdrawglyph(g, cx, cy);
++			XftDrawRect(xw.draw, &drawcol,
++					borderpx + cx * win.cw,
++					borderpx + (cy + 1) * win.ch - \
++						cursorthickness,
++					win.cw, cursorthickness);
+ 			break;
+ 		case 3: /* Blinking underline */
+ 			if (IS_SET(MODE_BLINK))
+@@ -2352,6 +2369,12 @@ usage(void)
+ int
+ main(int argc, char *argv[])
+ {
++	char *no_color_arg = getenv("NO_COLOR");
++	no_color = 0;
++
++	if (no_color_arg != NULL && no_color_arg[0] != '\0')
++		no_color = 1;
++
+ 	xw.l = xw.t = 0;
+ 	xw.isfixed = False;
+ 	xsetcursor(cursorshape);
