@@ -1,18 +1,7 @@
 diff --git a/x.c b/x.c
-index b36fb8c..9978caa 100644
+index b36fb8c..a299fd3 100644
 --- a/x.c
 +++ b/x.c
-@@ -142,8 +142,8 @@ typedef struct {
- 
- static inline ushort sixd_to_16bit(int);
- static int xmakeglyphfontspecs(XftGlyphFontSpec *, const Glyph *, int, int, int);
--static void xdrawglyphfontspecs(const XftGlyphFontSpec *, Glyph, int, int, int);
--static void xdrawglyph(Glyph, int, int);
-+static void xdrawglyphfontspecs(const XftGlyphFontSpec *, Glyph, int, int, int, int);
-+static void xdrawglyph(Glyph, int, int, int);
- static void xclear(int, int, int, int);
- static int xgeommasktogravity(int);
- static int ximopen(Display *);
 @@ -220,6 +220,7 @@ static DC dc;
  static XWindow xw;
  static XSelection xsel;
@@ -21,20 +10,11 @@ index b36fb8c..9978caa 100644
  
  /* Font Ring Cache */
  enum {
-@@ -1372,7 +1373,7 @@ xmakeglyphfontspecs(XftGlyphFontSpec *specs, const Glyph *glyphs, int len, int x
- }
- 
- void
--xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, int y)
-+xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, int y, int is_cursor)
- {
- 	int charlen = len * ((base.mode & ATTR_WIDE) ? 2 : 1);
- 	int winx = borderpx + x * win.cw, winy = borderpx + y * win.ch,
 @@ -1381,6 +1382,12 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
  	XRenderColor colfg, colbg;
  	XRectangle r;
  
-+    if (no_color && !is_cursor) {
++    if (no_color) {
 +        fg = &dc.col[defaultfg];
 +        bg = &dc.col[defaultbg];
 +        goto no_color_end;
@@ -52,64 +32,36 @@ index b36fb8c..9978caa 100644
  	if (base.mode & ATTR_BLINK && win.mode & MODE_BLINK)
  		fg = bg;
  
-@@ -1507,13 +1516,13 @@ xdrawglyphfontspecs(const XftGlyphFontSpec *specs, Glyph base, int len, int x, i
- }
- 
- void
--xdrawglyph(Glyph g, int x, int y)
-+xdrawglyph(Glyph g, int x, int y, int is_cursor)
+@@ -1520,12 +1529,15 @@ void
+ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
  {
- 	int numspecs;
- 	XftGlyphFontSpec spec;
+ 	Color drawcol;
++    int old_no_color = no_color;
  
- 	numspecs = xmakeglyphfontspecs(&spec, &g, 1, x, y);
--	xdrawglyphfontspecs(&spec, g, numspecs, x, y);
-+	xdrawglyphfontspecs(&spec, g, numspecs, x, y, is_cursor);
- }
- 
- void
-@@ -1524,7 +1533,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
  	/* remove the old cursor */
  	if (selected(ox, oy))
  		og.mode ^= ATTR_REVERSE;
--	xdrawglyph(og, ox, oy);
-+	xdrawglyph(og, ox, oy, 0);
+ 	xdrawglyph(og, ox, oy);
  
++    no_color = 0;
++
  	if (IS_SET(MODE_HIDE))
  		return;
-@@ -1564,7 +1573,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
- 		case 0: /* Blinking Block */
- 		case 1: /* Blinking Block (Default) */
- 		case 2: /* Steady Block */
--			xdrawglyph(g, cx, cy);
-+			xdrawglyph(g, cx, cy, 1);
- 			break;
- 		case 3: /* Blinking Underline */
- 		case 4: /* Steady Underline */
-@@ -1661,7 +1670,7 @@ xdrawline(Line line, int x1, int y1, int x2)
- 		if (selected(x, y1))
- 			new.mode ^= ATTR_REVERSE;
- 		if (i > 0 && ATTRCMP(base, new)) {
--			xdrawglyphfontspecs(specs, base, i, ox, y1);
-+			xdrawglyphfontspecs(specs, base, i, ox, y1, 0);
- 			specs += i;
- 			numspecs -= i;
- 			i = 0;
-@@ -1673,7 +1682,7 @@ xdrawline(Line line, int x1, int y1, int x2)
- 		i++;
+ 
+@@ -1600,6 +1612,7 @@ xdrawcursor(int cx, int cy, Glyph g, int ox, int oy, Glyph og)
+ 				borderpx + (cy + 1) * win.ch - 1,
+ 				win.cw, 1);
  	}
- 	if (i > 0)
--		xdrawglyphfontspecs(specs, base, i, ox, y1);
-+		xdrawglyphfontspecs(specs, base, i, ox, y1, 0);
++    no_color = old_no_color;
  }
  
  void
-@@ -2033,6 +2042,8 @@ main(int argc, char *argv[])
+@@ -2033,6 +2046,8 @@ main(int argc, char *argv[])
  	xw.l = xw.t = 0;
  	xw.isfixed = False;
  	xsetcursor(cursorshape);
 +	char *no_color_arg = getenv("NO_COLOR");
-+	no_color = (no_color_arg != NULL && no_color_arg[0] != '\0' && no_color_arg != "0" && no_color_arg != "n");
++	no_color = (no_color_arg != NULL && no_color_arg[0] != '\0' && no_color_arg[0] != '0' && no_color_arg[0] != 'n');
  
  	ARGBEGIN {
  	case 'a':
